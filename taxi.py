@@ -342,7 +342,7 @@ class Taxi:
           # reconstruct the path
           path = []
           current = goal
-          while currnent != start:
+          while current != start:
               path.append(current)
               current = came_from[current]
           path.reverse()
@@ -475,27 +475,49 @@ class Taxi:
         return total_time
             
            
-      def _bidOnFare(self, time, origin, destination, price):
-          NoCurrentPassengers = self._passenger is None
-          NoAllocatedFares = len([fare for fare in self._availableFares.values() if fare.allocated]) == 0
-          TimeToOrigin = self._world.travelTime(self._loc, self._world.getNode(origin[0], origin[1]))
-          TimeToDestination = self._world.travelTime(self._world.getNode(origin[0], origin[1]),
-                                                     self._world.getNode(destination[1], destination[1]))
-          FiniteTimeToOrigin = TimeToOrigin > 0
-          FiniteTimeToDestination = TimeToDestination > 0
-          CanAffordToDrive = self._account > TimeToOrigin
-          FairPriceToDestination = price > TimeToDestination
-          PriceBetterThanCost = FairPriceToDestination and FiniteTimeToDestination
-          FareExpiryInFuture = self._maxFareWait > self._world.simTime-time
-          EnoughTimeToReachFare = self._maxFareWait-self._world.simTime+time > TimeToOrigin
-          SufficientDrivingTime = FiniteTimeToOrigin and EnoughTimeToReachFare 
-          WillArriveOnTime = FareExpiryInFuture and SufficientDrivingTime
-          NotCurrentlyBooked = NoCurrentPassengers and NoAllocatedFares
-          CloseEnough = CanAffordToDrive and WillArriveOnTime
-          Worthwhile = PriceBetterThanCost and NotCurrentlyBooked 
-          Bid = CloseEnough and Worthwhile
-          return Bid
-      
+      def _bidOnFare(self, fare, current_time): # optimized bidding strategy to maximise profit
+          # do not bid if there is max fares
+          if (len(self._current_fares) >= self._max_fares):
+              return None
+          
+          # calucate the original distance and time(deterministic)
+          dist_to_pickup = self._calculateDistance(self._loc, fare.origin)
+          dist_to_dest = self._calculateDistance(fare.origin, fare.destination)
+          total_dist = dist_to_pickup + dist_to_dest
+          
+          # calculate the original time
+          base_time = total_dist / 30.0
+          
+          # Traffic probability factors
+          peak_hours = self._isPeakHour(current_time)
+          traffic_multiplier = 1.5 if peak_hours else 1.2
+          
+          # expected time(with traffic prob)
+          expected_time = base_time * traffic_multiplier
+          
+          # calculate the exp profit
+          base_fare = 10.0
+          distance_fare = 2.0 * dist_to_dest
+          expected_prof = base_fare + distance_fare
+          
+          # caclukate the costs
+          fuel_cost = 0.5 * total_dist  # Fuel cost per unit distance
+          time_cost = 1.0 * expected_time  # Opportunity cost of time
+          total_cost = fuel_cost + time_cost
+    
+          # Expected profit
+          expected_profit = expected_revenue - total_cost
+    
+          # Minimum profit threshold
+          if expected_profit < 5.0:
+           return None
+        
+          # Bid calculation - slightly under the maximum possible to remain competitive
+          bid = expected_time * 0.95
+    
+          return bid
+
+          
       
       @property
       def number(self):
